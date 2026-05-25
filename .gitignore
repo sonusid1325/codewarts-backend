@@ -1,0 +1,30 @@
+# Binaries & Executables
+/server
+/test_bin
+/cmd/server/server
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Environment Variables
+.env
+.env.*
+!.env.example
+
+# OS and IDE Files
+.DS_Store
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# Logs & Database files
+*.log
+/pgdata/
+
+# Docker Compose with secrets (use docker-compose.example.yml as template)
+docker-compose.yml
