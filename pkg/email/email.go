@@ -1,30 +1,28 @@
 package email
 
 import (
-	"crypto/tls"
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
-	"net/smtp"
+	"net/http"
 	"os"
+	"strings"
+	"time"
 )
 
 // SendVerificationEmail sends a 6-digit verification code to the target email.
 func SendVerificationEmail(targetEmail, username, code string) error {
-	smtpHost := os.Getenv("SMTP_HOST")
-	smtpPort := os.Getenv("SMTP_PORT")
-	smtpUser := os.Getenv("SMTP_USER")
-	smtpPass := os.Getenv("SMTP_PASS")
+	apiKey := os.Getenv("BREVO_API_KEY")
 	smtpSender := os.Getenv("SMTP_SENDER")
 
-	if smtpHost == "" || smtpPort == "" || smtpUser == "" || smtpPass == "" || smtpSender == "" {
-		return fmt.Errorf("SMTP configuration incomplete: ensure SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_SENDER are set in environment")
+	if apiKey == "" || smtpSender == "" {
+		return fmt.Errorf("Brevo configuration incomplete: ensure BREVO_API_KEY and SMTP_SENDER are set in environment")
 	}
 
-	auth := smtp.PlainAuth("", smtpUser, smtpPass, smtpHost)
-
 	// Compose Email
-	subject := "Subject: [Codewarts] Verify Your Wand Coordinates!\n"
-	mime := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"
+	subject := "[Codewarts] Verify Your Wand Coordinates!"
 	body := fmt.Sprintf(`
 		<html>
 		<body style="font-family: sans-serif; background-color: #09090b; color: #f4f4f5; padding: 20px; margin: 0;">
@@ -54,50 +52,44 @@ func SendVerificationEmail(targetEmail, username, code string) error {
 		</html>
 	`, username, code)
 
-	msg := []byte("To: " + targetEmail + "\n" + "From: Codewarts <" + smtpSender + ">\n" + subject + mime + body)
-	addr := smtpHost + ":" + smtpPort
+	payload := map[string]interface{}{
+		"sender": map[string]string{
+			"name":  "Codewarts",
+			"email": smtpSender,
+		},
+		"to": []map[string]string{
+			{
+				"email": targetEmail,
+				"name":  username,
+			},
+		},
+		"subject":     subject,
+		"htmlContent": body,
+	}
 
-	log.Printf("Connecting to SMTP server at %s for %s...", addr, targetEmail)
-	c, err := smtp.Dial(addr)
+	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("failed to dial SMTP server: %w", err)
-	}
-	defer c.Close()
-
-	config := &tls.Config{
-		ServerName: smtpHost,
-	}
-	if err = c.StartTLS(config); err != nil {
-		return fmt.Errorf("failed to start TLS: %w", err)
+		return fmt.Errorf("failed to encode Brevo payload: %w", err)
 	}
 
-	if err = c.Auth(auth); err != nil {
-		return fmt.Errorf("failed to authenticate SMTP: %w", err)
-	}
-
-	if err = c.Mail(smtpSender); err != nil {
-		return fmt.Errorf("failed to execute MAIL command: %w", err)
-	}
-
-	if err = c.Rcpt(targetEmail); err != nil {
-		return fmt.Errorf("failed to execute RCPT command: %w", err)
-	}
-
-	w, err := c.Data()
+	req, err := http.NewRequest(http.MethodPost, "https://api.brevo.com/v3/smtp/email", bytes.NewReader(payloadBytes))
 	if err != nil {
-		return fmt.Errorf("failed to execute DATA command: %w", err)
+		return fmt.Errorf("failed to create Brevo request: %w", err)
 	}
+	req.Header.Set("api-key", apiKey)
+	req.Header.Set("Content-Type", "application/json")
 
-	if _, err = w.Write(msg); err != nil {
-		return fmt.Errorf("failed to write message body: %w", err)
+	log.Printf("Dispatching verification email to %s via Brevo API...", targetEmail)
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send Brevo request: %w", err)
 	}
+	defer resp.Body.Close()
 
-	if err = w.Close(); err != nil {
-		return fmt.Errorf("failed to close data writer: %w", err)
-	}
-
-	if err = c.Quit(); err != nil {
-		log.Printf("Warning: SMTP QUIT connection error: %v", err)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("brevo send failed: status %s: %s", resp.Status, strings.TrimSpace(string(bodyBytes)))
 	}
 
 	log.Printf("Verification email successfully delivered to %s", targetEmail)
