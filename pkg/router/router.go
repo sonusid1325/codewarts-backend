@@ -175,6 +175,9 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	req.Username = strings.TrimSpace(req.Username)
+	req.Email = strings.TrimSpace(req.Email)
+
 	if req.Username == "" || req.Email == "" || req.Password == "" {
 		http.Error(w, "Username, email, and password are required", http.StatusBadRequest)
 		return
@@ -245,12 +248,14 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var userID, username, passwordHash string
+	req.UsernameOrEmail = strings.TrimSpace(req.UsernameOrEmail)
+
+	var userID, username, emailAddress, passwordHash string
 	var isVerified bool
 	err := db.DB.QueryRow(
-		"SELECT id, username, password_hash, is_verified FROM users WHERE username = $1 OR email = $1",
+		"SELECT id, username, email, password_hash, is_verified FROM users WHERE username = $1 OR email = $1",
 		req.UsernameOrEmail,
-	).Scan(&userID, &username, &passwordHash, &isVerified)
+	).Scan(&userID, &username, &emailAddress, &passwordHash, &isVerified)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -267,7 +272,12 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !isVerified {
-		http.Error(w, "Email not verified. Please verify your email first.", http.StatusForbidden)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "Email not verified",
+			"email": emailAddress,
+		})
 		return
 	}
 
@@ -296,6 +306,9 @@ func handleVerifyEmail(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	req.Email = strings.TrimSpace(req.Email)
+	req.Code = strings.TrimSpace(req.Code)
 
 	if req.Email == "" || req.Code == "" {
 		http.Error(w, "Email and code are required", http.StatusBadRequest)
@@ -354,6 +367,8 @@ func handleResendCode(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	req.Email = strings.TrimSpace(req.Email)
 
 	if req.Email == "" {
 		http.Error(w, "Email is required", http.StatusBadRequest)
@@ -454,6 +469,8 @@ func handleVerifyTask(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	req.UserInput = strings.TrimSpace(req.UserInput)
 
 	// 1. Fetch user's current progress
 	var currentChapter, currentTask int
