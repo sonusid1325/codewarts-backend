@@ -266,6 +266,7 @@ func HandleTerminalWS(w http.ResponseWriter, r *http.Request, userID string, use
 		AttachStdin:  true,
 		AttachStdout: true,
 		AttachStderr: true,
+		WorkingDir:   "/home/player",
 		Cmd:          []string{"/bin/bash"},
 	}
 
