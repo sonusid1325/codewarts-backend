@@ -360,12 +360,12 @@ func handleResendCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var username, correctCode string
+	var username, emailAddress, correctCode string
 	var isVerified bool
 	err := db.DB.QueryRow(
-		"SELECT username, verification_code, is_verified FROM users WHERE email = $1 OR username = $1",
+		"SELECT username, email, verification_code, is_verified FROM users WHERE email = $1 OR username = $1",
 		req.Email,
-	).Scan(&username, &correctCode, &isVerified)
+	).Scan(&username, &emailAddress, &correctCode, &isVerified)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -393,9 +393,9 @@ func handleResendCode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	go func() {
-		err := email.SendVerificationEmail(req.Email, username, code)
+		err := email.SendVerificationEmail(emailAddress, username, code)
 		if err != nil {
-			log.Printf("Failed to dispatch resent verification email to %s: %v", req.Email, err)
+			log.Printf("Failed to dispatch resent verification email to %s: %v", emailAddress, err)
 		}
 	}()
 
