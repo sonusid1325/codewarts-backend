@@ -35,10 +35,7 @@ services:
       - DB_SSLMODE=disable
       - JWT_SECRET=YOUR_SECURE_JWT_SECRET_KEY
       - DEV_MODE=true
-      - SMTP_HOST=smtp-relay.brevo.com
-      - SMTP_PORT=587
-      - SMTP_USER=YOUR_BREVO_SMTP_LOGIN
-      - SMTP_PASS=YOUR_BREVO_SMTP_API_KEY
+      - BREVO_API_KEY=YOUR_BREVO_API_KEY
       - SMTP_SENDER=YOUR_BREVO_SENDER_EMAIL
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
